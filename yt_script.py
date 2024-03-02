@@ -1,33 +1,140 @@
 from pytube import YouTube
 import tkinter as tk
-from tkinter import Entry,Button,Label, Radiobutton, StringVar, IntVar
-import subprocess
+from tkinter import Entry,Button,Label, Radiobutton, StringVar, IntVar, Text, END, ttk ,HORIZONTAL
+import ffmpeg
+import os
+from threading import Thread
 
-def download_video(URL:str):
+#to allow ffmpeg function to run simulataenously with tkinter, previous windows not responsing
+def threading(): 
+    displayOutput.config(state="normal")
+    displayOutput.delete(1.0, END)
+    displayOutput.tag_configure("center", justify='center')
+    displayOutput.insert(END, "Downloading... Do not close window!")
+    displayOutput.tag_add("center", "1.0", "end")
+    displayOutput.config(state="disabled")
+
+    t1=Thread(target=download) 
+    t1.start()
+
+def bar(): 
+    # Progress bar widget 
+    progress = ttk.Progressbar(window, orient = HORIZONTAL, length = 200, mode = 'determinate')
+    progress.pack() 
+    progress['value'] = 50
+
+def ff_conversion(vid,aud,directory,outputname):
+    bar()
+    ffmpeg.concat(vid, aud, v=1, a=1).output(
+        os.path.join(directory, f"{outputname}.mp4"),loglevel="quiet").run(quiet=True)
+
+
+def download_video(URL:str,resolution):
     assert isinstance(URL,str), 'URL was not provided'
     
-    youtube_obj = YouTube(URL)
-    obj_stream = youtube_obj.streams.get_highest_resolution()
-    obj_stream.download()
+    global mp4_flag,mp3_flag
 
-    
-#probe_cmd = ['ffprobe', '-hide_banner', '-pretty', 'Horse kicks tree farts on dogs then runs away.mp4']
-#p = subprocess.Popen(probe_cmd)
-#p.wait()
-#user_link = input("Enter Video Link:")
-#user_res = input("Enter Resolution:")
-#download_video('https://www.youtube.com/watch?v=KCzwyFHSMdY')
+    if mp3_flag is True:
+        #create folder to store files
+        path = './YouTube Downloader Files'
+        if not os.path.exists(path):
+            os.mkdir(path)
+
+        youtube_obj = YouTube(URL)
+        obj_stream = youtube_obj.streams.filter(only_audio=True).first()
+        output_name = "".join([c for c in obj_stream.title if c.isalpha() or c.isdigit() or c==' ']).rstrip()
+        obj_stream.download(output_path=path,filename=output_name+'.mp3')
+
+        #set display to write, enter text, then set to read only
+        displayOutput.config(state="normal")
+        displayOutput.delete(1.0, END)
+        displayOutput.tag_configure("center", justify='center')
+        displayOutput.insert(END, "Downloaded successfully!")
+        displayOutput.tag_add("center", "1.0", "end")
+        displayOutput.config(state="disabled")
+
+    else:
+        #create folder to store files
+        path = './YouTube Downloader Files'
+        if not os.path.exists(path):
+            os.mkdir(path)
+
+        filter_res = None
+
+        if resolution == 1:
+            filter_res = '1080p'
+
+        if resolution == 2:
+            filter_res = '720p'
+
+        if resolution == 3:
+            filter_res = '360p'
+
+        #for 1080p, have to combine audio video manually
+        if filter_res == '1080p':
+            path = './YouTube Downloader Files'
+            if not os.path.exists(path):
+                os.mkdir(path)
+
+            youtube_obj = YouTube(URL)
+            #downloads audio
+            obj_stream = youtube_obj.streams.filter(only_audio=True).first()
+            output_name = "".join([c for c in obj_stream.title if c.isalpha() or c.isdigit() or c==' ']).rstrip()
+            obj_stream.download(output_path=path,filename=output_name+'.mp3')
+            #downloads video, video file name has '_g.mp4'
+            obj_stream_video = youtube_obj.streams.filter(res=filter_res)
+            obj_stream_video[0].download(output_path=path,filename=output_name+'_g.mp4')
+            
+
+            #define relative path to the audio and video files
+            relative_V = os.path.join(path,output_name +"_g.mp4").replace('\\','/')
+            relative_A = os.path.join(path,output_name +".mp3").replace('\\','/')
+
+            #combine files into one
+            video_f = ffmpeg.input(relative_V)
+            audio_f = ffmpeg.input(relative_A)
+            
+            ff_conversion(video_f, audio_f,path,output_name)
+            #ffmpeg.concat(video_f, audio_f, v=1, a=1).output(os.path.join(path, f"{output_name}.mp4")).run()
+
+            #delete the mp4 and mp3 file
+            os.remove(relative_A)
+            os.remove(relative_V)
+
+            #set display to write, enter text, then set to read only
+            displayOutput.config(state="normal")
+            displayOutput.delete(1.0, END)
+            displayOutput.tag_configure("center", justify='center')
+            displayOutput.insert(END, "Downloaded successfully!")
+            displayOutput.tag_add("center", "1.0", "end")
+            displayOutput.config(state="disabled")
+
+        
+        else:
+            youtube_obj = YouTube(URL,use_oauth=False)
+            obj_stream = youtube_obj.streams.filter(res=filter_res)
+            print(obj_stream[0])
+            obj_stream[0].download(output_path=path)
+
+            #set display to write, enter text, then set to read only
+            displayOutput.config(state="normal")
+            displayOutput.delete(1.0, END)
+            displayOutput.tag_configure("center", justify='center')
+            displayOutput.insert(END, "Downloaded successfully!")
+            displayOutput.tag_add("center", "1.0", "end")
+            displayOutput.config(state="disabled")
+
 
 #flag for button
 mp4_flag = False
 mp3_flag = False
-download_flag = False
 
 #main GUI
 window = tk.Tk()
 
 #display size
-window.geometry('600x360')
+window.geometry('600x380')
+window.eval('tk::PlaceWindow . center')
 
 #labels
 window.title("YTD")
@@ -64,40 +171,57 @@ def toggle_mp3():
         mp3_button.config(bg = "#C6C6C6")
         mp3_flag = False
 
+#calls the pytube script, contains logic as well
 def download():
     global download_flag,ok
 
-    if download_flag == True:
-        print(download_flag)
-        ok.forget()
-        download_flag = False
-
-        selected_radio = radio.get()
-        selected_url = url_input.get()
-        selected_video= mp4_button.get()
-        selected_audio = mp3_button.get()
-        #call pytube func
-        try:
-            validate = download_video(selected_url)
-            download_flag = True
-            ok = Label(window, text = "Video downloaded successfully!")
-            ok.pack(side='top')
-        except Exception as e:
-            print(e)
-            Label(window, text = "Download failed...check your inputs.").pack(side='top')
-    else:
-        selected_radio = radio.get()
-        selected_url = url_input.get()
-        #call pytube func
-        try:
-            validate = download_video(selected_url)
-            download_flag = True
-            ok = Label(window, text = "Video downloaded successfully!")
-            ok.pack(side='top')
-        except Exception as e:
-            print(e)
-            Label(window, text = "Download failed...check your inputs.").pack(side='top')
+    #if both audio and video options were selected, stop!
+    if mp4_flag is True and mp3_flag is True:
+        #set display to write, enter text, then set to read only
+        displayOutput.config(state="normal")
+        displayOutput.delete(1.0, END)
+        displayOutput.tag_configure("center", justify='center')
+        displayOutput.insert(END, "Select either VIDEO or AUDIO, not both...")
+        displayOutput.tag_add("center", "1.0", "end")
+        displayOutput.config(state="disabled")
+        return
     
+    selected_radio = radio.get()
+    selected_url = url_input.get()
+
+    #ensure format is chosen
+    if mp4_flag is False and mp3_flag is False:
+        displayOutput.config(state="normal")
+        displayOutput.delete(1.0, END)
+        displayOutput.tag_configure("center", justify='center')
+        displayOutput.insert(END, "Select a format first.")
+        displayOutput.tag_add("center", "1.0", "end")
+        displayOutput.config(state="disabled")
+        return
+
+    #ensure res is selected
+    if selected_radio == 0 and mp4_flag is True:
+        displayOutput.config(state="normal")
+        displayOutput.delete(1.0, END)
+        displayOutput.tag_configure("center", justify='center')
+        displayOutput.insert(END, "Choose a resolution.")
+        displayOutput.tag_add("center", "1.0", "end")
+        displayOutput.config(state="disabled")
+        return
+ 
+    try:
+        #display progress bar for video download
+        download_video(selected_url,selected_radio)
+
+    except Exception as e:
+        displayOutput.config(state="normal")
+        displayOutput.delete(1.0, END)
+        displayOutput.tag_configure("center", justify='center')
+        displayOutput.insert(END, "Download failed...check your inputs.")
+        displayOutput.tag_add("center", "1.0", "end")
+        displayOutput.config(state="disabled")
+        print(e)
+
 
 #instruction for video or audio download
 my_label = Label(window, text = "Download the video or just the audio?")
@@ -110,16 +234,20 @@ mp4_button.pack(side="top",pady="10")
 mp3_button = Button(window,text='Audio',bg = "#C6C6C6",height=1,width=10, command=toggle_mp3)
 mp3_button.pack(side="top",pady="10")
 
-res_label = Label(window, text = "Choose video resolution").pack(side='top')
+res_label = Label(window, text = "Choose video resolution (for video only)").pack(side='top')
 
 #assigns radiobutton to be of type integer
 radio = IntVar()
 
 Radiobutton(window,text='1080p',variable=radio, value=1).pack(side='top')
 Radiobutton(window,text='720p',variable=radio, value=2).pack(side='top')
-Radiobutton(window,text='480p',variable=radio, value=3).pack(side='top')
-Radiobutton(window,text='360p',variable=radio, value=4).pack(side='top')
+Radiobutton(window,text='360p',variable=radio, value=3).pack(side='top')
 
 #download video
-main_btn = Button(window,text='DOWNLOAD',bg ="#00FF00",height=1,width=10,command=download).pack(side='top',pady=5)
+main_btn = Button(window,text='DOWNLOAD',bg ="#00FF00",height=1,width=10,command=threading).pack(side='top',pady=5)
+
+displayOutput = Text(window, height = 1, width = 47)
+displayOutput.config(state="disabled")
+displayOutput.pack(side='top',pady=5)
+
 window.mainloop()
