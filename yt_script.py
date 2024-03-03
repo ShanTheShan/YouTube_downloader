@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import Entry,Button,Label, Radiobutton, StringVar, IntVar, Text, END, ttk ,HORIZONTAL
 import ffmpeg
 import os
+import subprocess
 from threading import Thread
 
 #to allow ffmpeg function to run simulataenously with tkinter, previous windows not responsing
@@ -17,16 +18,22 @@ def threading():
     t1=Thread(target=download) 
     t1.start()
 
-def bar(): 
-    # Progress bar widget 
-    progress = ttk.Progressbar(window, orient = HORIZONTAL, length = 200, mode = 'determinate')
-    progress.pack() 
-    progress['value'] = 50
+
+class Bar:
+    def __init__(self,window):
+        self.progress = ttk.Progressbar(window, orient = HORIZONTAL, length = 100, mode = 'indeterminate')
+        self.progress.start(15)
+
+    def show_bar(self):
+        self.progress.pack() 
+
+    def hide_bar(self):
+        self.progress.pack_forget()
+
 
 def ff_conversion(vid,aud,directory,outputname):
-    bar()
-    ffmpeg.concat(vid, aud, v=1, a=1).output(
-        os.path.join(directory, f"{outputname}.mp4"),loglevel="quiet").run(quiet=True)
+    ffmpeg.concat(vid, aud, v=1, a=1).output(os.path.join(directory, f"{outputname}.mp4")).overwrite_output().run()
+    progressBar.hide_bar()
 
 
 def download_video(URL:str,resolution):
@@ -46,12 +53,15 @@ def download_video(URL:str,resolution):
         obj_stream.download(output_path=path,filename=output_name+'.mp3')
 
         #set display to write, enter text, then set to read only
+        progressBar.hide_bar()
+
         displayOutput.config(state="normal")
         displayOutput.delete(1.0, END)
         displayOutput.tag_configure("center", justify='center')
         displayOutput.insert(END, "Downloaded successfully!")
         displayOutput.tag_add("center", "1.0", "end")
         displayOutput.config(state="disabled")
+        
 
     else:
         #create folder to store files
@@ -85,7 +95,6 @@ def download_video(URL:str,resolution):
             obj_stream_video = youtube_obj.streams.filter(res=filter_res)
             obj_stream_video[0].download(output_path=path,filename=output_name+'_g.mp4')
             
-
             #define relative path to the audio and video files
             relative_V = os.path.join(path,output_name +"_g.mp4").replace('\\','/')
             relative_A = os.path.join(path,output_name +".mp3").replace('\\','/')
@@ -95,7 +104,6 @@ def download_video(URL:str,resolution):
             audio_f = ffmpeg.input(relative_A)
             
             ff_conversion(video_f, audio_f,path,output_name)
-            #ffmpeg.concat(video_f, audio_f, v=1, a=1).output(os.path.join(path, f"{output_name}.mp4")).run()
 
             #delete the mp4 and mp3 file
             os.remove(relative_A)
@@ -108,15 +116,16 @@ def download_video(URL:str,resolution):
             displayOutput.insert(END, "Downloaded successfully!")
             displayOutput.tag_add("center", "1.0", "end")
             displayOutput.config(state="disabled")
-
         
         else:
             youtube_obj = YouTube(URL,use_oauth=False)
             obj_stream = youtube_obj.streams.filter(res=filter_res)
             print(obj_stream[0])
             obj_stream[0].download(output_path=path)
-
+            
             #set display to write, enter text, then set to read only
+            progressBar.hide_bar()
+
             displayOutput.config(state="normal")
             displayOutput.delete(1.0, END)
             displayOutput.tag_configure("center", justify='center')
@@ -131,6 +140,7 @@ mp3_flag = False
 
 #main GUI
 window = tk.Tk()
+progressBar = Bar(window)
 
 #display size
 window.geometry('600x380')
@@ -154,7 +164,6 @@ def toggle_mp4():
     if not mp4_flag:
         mp4_button.config(bg = "green")
         mp4_flag = True
-
 
     else:
         mp4_button.config(bg = "#C6C6C6")
@@ -211,6 +220,7 @@ def download():
  
     try:
         #display progress bar for video download
+        progressBar.show_bar()
         download_video(selected_url,selected_radio)
 
     except Exception as e:
