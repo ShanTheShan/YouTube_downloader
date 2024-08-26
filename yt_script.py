@@ -1,8 +1,9 @@
 from pytube import YouTube
 import tkinter as tk
-from tkinter import Entry,Button,Label, Radiobutton, StringVar, IntVar, Text, END, ttk ,HORIZONTAL
+from tkinter import Entry,Button,Label, Radiobutton, StringVar, IntVar, Text, END, ttk ,HORIZONTAL,filedialog
 import ffmpeg
 import os
+import re
 import subprocess
 from threading import Thread
 
@@ -143,7 +144,7 @@ window = tk.Tk()
 progressBar = Bar(window)
 
 #display size
-window.geometry('600x380')
+window.geometry('600x530')
 window.eval('tk::PlaceWindow . center')
 
 #labels
@@ -227,10 +228,88 @@ def download():
         displayOutput.config(state="normal")
         displayOutput.delete(1.0, END)
         displayOutput.tag_configure("center", justify='center')
-        displayOutput.insert(END, "Download failed...check your inputs.")
+        displayOutput.insert(END, "Download failed..." + str(e))
         displayOutput.tag_add("center", "1.0", "end")
         displayOutput.config(state="disabled")
-        print(e)
+        
+
+
+#global var, all related to mp3 to wav conversion
+fullMusicPath = None
+match = None
+
+# Function for opening the 
+# file explorer window
+def browseFiles():
+    try:
+        filename = filedialog.askopenfilename(initialdir = "/",
+                                          title = "Select a File",
+                                          filetypes=(
+                                            ("MP3 files", "*.mp3"),
+                                            ))
+    
+        global fullMusicPath
+        fullMusicPath = filename
+
+        pattern = "[^\/]+$"
+        global match
+
+        match = re.search(pattern,filename)
+        match = match.group(0)
+        # Change label contents
+        label_file_explorer.config(text = match)
+
+    except Exception as e:
+        return
+
+
+
+def convertFile(file):
+    if file != None:
+        #create folder to store files
+        path = './Converted Files'
+        if not os.path.exists(path):
+            os.mkdir(path)
+    else:
+        displayOutputConversion.config(state="normal")
+        displayOutputConversion.delete(1.0, END)
+        displayOutputConversion.tag_configure("center", justify='center')
+        displayOutputConversion.insert(END, "Open a file first...")
+        displayOutputConversion.tag_add("center", "1.0", "end")
+        displayOutputConversion.config(state="disabled")
+        return
+
+    try:
+        progressBar.show_bar()
+        print('progress bar shown')
+        fileString = match.split('.')[0]
+        convertedFileName = fileString + '.wav'
+        output_path = os.path.join('./Converted Files', convertedFileName)
+        subprocess.call(['ffmpeg', '-y', '-i', fullMusicPath,
+            output_path])
+        
+        progressBar.hide_bar()
+        print('progress bar hidden')
+        displayOutputConversion.config(state="normal")
+        displayOutputConversion.delete(1.0, END)
+        displayOutputConversion.tag_configure("center", justify='center')
+        displayOutputConversion.insert(END, "Converted successfully!")
+        displayOutputConversion.tag_add("center", "1.0", "end")
+        displayOutputConversion.config(state="disabled")
+
+    except Exception as e:
+        progressBar.hide_bar()
+        displayOutputConversion.config(state="normal")
+        displayOutputConversion.delete(1.0, END)
+        displayOutputConversion.tag_configure("center", justify='center')
+        displayOutputConversion.insert(END, "Conversion failed..." + str(e))
+        displayOutputConversion.tag_add("center", "1.0", "end")
+        displayOutputConversion.config(state="disabled")
+
+    
+
+        
+
 
 
 #instruction for video or audio download
@@ -259,5 +338,26 @@ main_btn = Button(window,text='DOWNLOAD',bg ="#00FF00",height=1,width=10,command
 displayOutput = Text(window, height = 1, width = 47)
 displayOutput.config(state="disabled")
 displayOutput.pack(side='top',pady=5)
+
+#conversion to wav
+wav_label = Label(window, text = "Convert mp3 to wav").pack(side='top')
+
+# Create a File Explorer label
+label_file_explorer = Label(window, 
+                            text = "Your uploaded file will appear here...",
+                            width = 100, height = 2, 
+                            fg = "blue")
+label_file_explorer.pack(side='top')
+
+button_Open_Explorer = Button(window, 
+                        text = "Browse File",
+                        command = browseFiles).pack(side='top',pady=5)
+
+#convert mp3 to wav button
+main_btn = Button(window,text='CONVERT',bg ="#00FF00",height=1,width=10,command=lambda: convertFile(fullMusicPath)).pack(side='top',pady=5)
+
+displayOutputConversion = Text(window, height = 1, width = 47)
+displayOutputConversion.config(state="disabled")
+displayOutputConversion.pack(side='top',pady=10)
 
 window.mainloop()
