@@ -1,4 +1,6 @@
-from pytube import YouTube
+from pytubefix import YouTube
+from pydub import AudioSegment
+
 import tkinter as tk
 from tkinter import Entry,Button,Label, Radiobutton, StringVar, IntVar, Text, END, ttk ,HORIZONTAL,filedialog
 import ffmpeg
@@ -49,9 +51,17 @@ def download_video(URL:str,resolution):
             os.mkdir(path)
 
         youtube_obj = YouTube(URL)
-        obj_stream = youtube_obj.streams.filter(only_audio=True).first()
-        output_name = "".join([c for c in obj_stream.title if c.isalpha() or c.isdigit() or c==' ']).rstrip()
-        obj_stream.download(output_path=path,filename=output_name+'.mp3')
+        ys = youtube_obj.streams.get_audio_only()
+        ys.download(output_path=path)
+
+        #convert m4a to mp3 using pydub
+        old_audio_directory = path + '/' + ys.title +'.m4a'
+        new_audio_directory = path + '/' + ys.title +'.mp3'
+        m4a_audio = AudioSegment.from_file(old_audio_directory, format="m4a")
+        m4a_audio.export(new_audio_directory,format="mp3")
+
+        #remove the m4a file
+        os.remove(old_audio_directory)
 
         #set display to write, enter text, then set to read only
         progressBar.hide_bar()
@@ -75,9 +85,6 @@ def download_video(URL:str,resolution):
         if resolution == 1:
             filter_res = '1080p'
 
-        if resolution == 2:
-            filter_res = '720p'
-
         if resolution == 3:
             filter_res = '360p'
 
@@ -89,16 +96,26 @@ def download_video(URL:str,resolution):
 
             youtube_obj = YouTube(URL)
             #downloads audio
-            obj_stream = youtube_obj.streams.filter(only_audio=True).first()
+            obj_stream = youtube_obj.streams.filter(only_audio=True)
+            audio_list = []
+            for i in obj_stream:
+                audio_list.append(i.abr)
+            highestAudioQuality = max(audio_list)
+
+            for i in obj_stream:
+                if i.abr == highestAudioQuality:
+                    obj_stream = i
+                    break
+                
             output_name = "".join([c for c in obj_stream.title if c.isalpha() or c.isdigit() or c==' ']).rstrip()
-            obj_stream.download(output_path=path,filename=output_name+'.mp3')
+            obj_stream.download(output_path=path,filename=output_name)
             #downloads video, video file name has '_g.mp4'
             obj_stream_video = youtube_obj.streams.filter(res=filter_res)
-            obj_stream_video[0].download(output_path=path,filename=output_name+'_g.mp4')
+            obj_stream_video[0].download(output_path=path,filename=output_name+'_g')
             
             #define relative path to the audio and video files
             relative_V = os.path.join(path,output_name +"_g.mp4").replace('\\','/')
-            relative_A = os.path.join(path,output_name +".mp3").replace('\\','/')
+            relative_A = os.path.join(path,output_name+".m4a").replace('\\','/')
 
             #combine files into one
             video_f = ffmpeg.input(relative_V)
@@ -111,6 +128,7 @@ def download_video(URL:str,resolution):
             os.remove(relative_V)
 
             #set display to write, enter text, then set to read only
+            progressBar.hide_bar()
             displayOutput.config(state="normal")
             displayOutput.delete(1.0, END)
             displayOutput.tag_configure("center", justify='center')
@@ -329,7 +347,6 @@ res_label = Label(window, text = "Choose video resolution (for video only)").pac
 radio = IntVar()
 
 Radiobutton(window,text='1080p',variable=radio, value=1).pack(side='top')
-Radiobutton(window,text='720p',variable=radio, value=2).pack(side='top')
 Radiobutton(window,text='360p',variable=radio, value=3).pack(side='top')
 
 #download video
