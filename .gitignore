@@ -1,1 +1,9 @@
-virenv
+#virtual enviroment
+.venv
+
+#builds
+build
+dist
+
+#spec files
+yt_script.spec
